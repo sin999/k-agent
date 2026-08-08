@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   tag:
+    # Creating the branch is not a merge; it must not consume a patch number.
+    if: ${{ !github.event.created }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
