@@ -1,0 +1,53 @@
+name: Tag minor version on merge to main
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# Merges landing back-to-back must not race for the same tag.
+concurrency:
+  group: tag-main
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next version
+        id: ver
+        run: |
+          set -euo pipefail
+          latest="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
+          if [ -z "$latest" ]; then
+            next="v0.1.0"
+          else
+            v="${latest#v}"
+            major="${v%%.*}"
+            rest="${v#*.}"
+            minor="${rest%%.*}"
+            next="v${major}.$((minor + 1)).0"
+          fi
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "Latest tag: ${latest:-<none>} -> next: $next"
+
+      - name: Create and push tag
+        env:
+          NEXT: ${{ steps.ver.outputs.next }}
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/$NEXT" >/dev/null; then
+            echo "Tag $NEXT already exists, nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$NEXT" -m "Release $NEXT"
+          git push origin "refs/tags/$NEXT"
+          echo "Pushed tag $NEXT" >> "$GITHUB_STEP_SUMMARY"
